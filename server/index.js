@@ -41,7 +41,16 @@ app.use(express.urlencoded({ extended: true }));
 
 // Serve static files from React app
 if (process.env.NODE_ENV === 'production') {
-  app.use(express.static(path.join(__dirname, '../client/build')));
+  const buildPath = path.join(__dirname, '../client/build');
+  // Проверяем существование папки build
+  const fs = require('fs');
+  if (fs.existsSync(buildPath)) {
+    app.use(express.static(buildPath));
+    console.log('✅ Serving React build from:', buildPath);
+  } else {
+    console.warn('⚠️  React build directory not found:', buildPath);
+    console.warn('⚠️  Make sure "npm run build" was executed successfully');
+  }
 }
 
 // API Routes
@@ -63,7 +72,16 @@ app.get('/api/health', (req, res) => {
 // Serve React app in production
 if (process.env.NODE_ENV === 'production') {
   app.get('*', (req, res) => {
-    res.sendFile(path.join(__dirname, '../client/build/index.html'));
+    const indexPath = path.join(__dirname, '../client/build/index.html');
+    const fs = require('fs');
+    if (fs.existsSync(indexPath)) {
+      res.sendFile(indexPath);
+    } else {
+      res.status(404).json({ 
+        error: 'React app not built', 
+        message: 'Please run "npm run build" to build the React application' 
+      });
+    }
   });
 }
 
@@ -78,7 +96,7 @@ async function startServer() {
     console.log('✅ Database connection established');
 
     // Sync database models
-    // В продакшене не синхронизируем автоматически
+    // В продакшене синхронизируем только если таблиц нет
     if (process.env.NODE_ENV !== 'production') {
       // Для SQLite используем более безопасную синхронизацию
       const isSQLite = sequelize.getDialect() === 'sqlite';
@@ -89,8 +107,9 @@ async function startServer() {
       }
       console.log('✅ Database models synchronized');
     } else {
-      // В продакшене только проверяем подключение
-      await sequelize.authenticate();
+      // В продакшене синхронизируем без alter (безопаснее)
+      await sequelize.sync({ alter: false });
+      console.log('✅ Database models synchronized (production)');
     }
 
     server.listen(PORT, HOST, () => {
