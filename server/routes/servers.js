@@ -7,24 +7,27 @@ const { Op } = require('sequelize');
 // Get user's servers
 router.get('/my-servers', verifyToken, async (req, res) => {
   try {
-    // Get servers where user is owner or member
-    const memberServers = await ServerMember.findAll({
-      where: { userId: req.userId },
-      include: [{ model: Server, as: 'server' }]
-    });
-    
+    // Get servers where user is owner
     const ownedServers = await Server.findAll({
       where: { ownerId: req.userId }
     });
 
-    const serverIds = [
-      ...ownedServers.map(s => s.id),
-      ...memberServers.map(m => m.server?.id).filter(Boolean)
-    ];
+    // Get servers where user is member
+    const memberRecords = await ServerMember.findAll({
+      where: { userId: req.userId }
+    });
+
+    const memberServerIds = memberRecords.map(m => m.serverId);
+    const ownedServerIds = ownedServers.map(s => s.id);
+    const allServerIds = [...new Set([...ownedServerIds, ...memberServerIds])];
+
+    if (allServerIds.length === 0) {
+      return res.json([]);
+    }
 
     const servers = await Server.findAll({
       where: {
-        id: serverIds.length > 0 ? { [Op.in]: serverIds } : [-1]
+        id: { [Op.in]: allServerIds }
       },
       include: [
         {
