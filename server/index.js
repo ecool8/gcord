@@ -16,7 +16,25 @@ const userRoutes = require('./routes/users');
 const { sequelize } = require('./database/sequelize');
 const { setupSocketIO } = require('./socket/socketHandler');
 
-dotenv.config();
+// Load environment variables
+// Try to load from secret file first (Render), then from .env
+const fs = require('fs');
+const secretEnvPath = '/etc/secrets/.env.production';
+const localEnvPath = path.join(__dirname, '../.env.production');
+
+if (fs.existsSync(secretEnvPath)) {
+  // Load from Render secret file
+  dotenv.config({ path: secretEnvPath });
+  console.log('✅ Loaded environment from Render secret file');
+} else if (fs.existsSync(localEnvPath)) {
+  // Load from local .env.production
+  dotenv.config({ path: localEnvPath });
+  console.log('✅ Loaded environment from .env.production');
+} else {
+  // Load from default .env or environment variables
+  dotenv.config();
+  console.log('✅ Loaded environment from .env or system variables');
+}
 
 const app = express();
 const server = http.createServer(app);
