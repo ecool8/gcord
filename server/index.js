@@ -78,9 +78,19 @@ async function startServer() {
     console.log('✅ Database connection established');
 
     // Sync database models
+    // В продакшене не синхронизируем автоматически
     if (process.env.NODE_ENV !== 'production') {
-      await sequelize.sync({ alter: true });
+      // Для SQLite используем более безопасную синхронизацию
+      const isSQLite = sequelize.getDialect() === 'sqlite';
+      if (isSQLite) {
+        await sequelize.sync({ force: false });
+      } else {
+        await sequelize.sync({ alter: true });
+      }
       console.log('✅ Database models synchronized');
+    } else {
+      // В продакшене только проверяем подключение
+      await sequelize.authenticate();
     }
 
     server.listen(PORT, HOST, () => {

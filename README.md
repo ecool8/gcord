@@ -32,6 +32,38 @@
 
 ### Локальная разработка
 
+#### Вариант 1: С SQLite (быстрый старт, без установки PostgreSQL)
+
+1. **Установите зависимости:**
+   ```bash
+   npm run install-all
+   ```
+
+2. **Создайте .env файл:**
+   ```bash
+   # Windows PowerShell
+   $env:USE_SQLITE="true"
+   ```
+
+   Или создайте файл `.env` вручную:
+   ```
+   USE_SQLITE=true
+   PORT=5000
+   NODE_ENV=development
+   JWT_SECRET=local-dev-secret-key
+   CLIENT_URL=http://localhost:3000
+   ```
+
+3. **Запустите приложение:**
+   ```bash
+   npm run dev
+   ```
+
+   - Backend: http://localhost:5000
+   - Frontend: http://localhost:3000 (откроется автоматически)
+
+#### Вариант 2: С PostgreSQL (рекомендуется для продакшена)
+
 1. **Установите PostgreSQL:**
    - Скачайте с [postgresql.org](https://www.postgresql.org/download/)
    - Создайте базу данных: `CREATE DATABASE analog_discord;`
@@ -41,19 +73,23 @@
    npm run install-all
    ```
 
-3. **Настройте переменные окружения:**
-   ```bash
-   cp .env.example .env
-   # Отредактируйте .env файл с вашими настройками БД
+3. **Создайте .env файл:**
+   ```
+   PORT=5000
+   NODE_ENV=development
+   DB_NAME=analog_discord
+   DB_USER=postgres
+   DB_PASSWORD=postgres
+   DB_HOST=localhost
+   DB_PORT=5432
+   JWT_SECRET=local-dev-secret-key
+   CLIENT_URL=http://localhost:3000
    ```
 
 4. **Запустите приложение:**
    ```bash
    npm run dev
    ```
-
-   - Backend: http://localhost:5000
-   - Frontend: http://localhost:3000
 
 ## 🚀 Деплой на Render.com
 

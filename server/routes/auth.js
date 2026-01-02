@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const jwt = require('jsonwebtoken');
 const { User } = require('../models');
+const { Op } = require('sequelize');
 const rateLimit = require('express-rate-limit');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'change-this-secret-key';
@@ -24,7 +25,7 @@ router.post('/register', authLimiter, async (req, res) => {
     // Check if user exists
     const existingUser = await User.findOne({
       where: {
-        $or: [{ email }, { username }]
+        [Op.or]: [{ email }, { username }]
       }
     });
 
@@ -59,7 +60,12 @@ router.post('/register', authLimiter, async (req, res) => {
     });
   } catch (error) {
     console.error('Registration error:', error);
-    res.status(500).json({ error: 'Failed to register user' });
+    // Отправляем более детальную ошибку для отладки
+    const errorMessage = error.errors?.[0]?.message || error.message || 'Failed to register user';
+    res.status(500).json({ 
+      error: 'Failed to register user',
+      details: errorMessage 
+    });
   }
 });
 

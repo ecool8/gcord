@@ -32,7 +32,9 @@ function Login({ onLogin }) {
 
       onLogin(result.user, result.token);
     } catch (error) {
-      setError(error.response?.data?.error || 'Произошла ошибка');
+      const errorMessage = error.response?.data?.error || error.response?.data?.details || error.message || 'Произошла ошибка';
+      setError(errorMessage);
+      console.error('Registration/Login error:', error.response?.data || error);
     } finally {
       setLoading(false);
     }
