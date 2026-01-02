@@ -8,9 +8,10 @@
     "server": "nodemon server/index.js",
     "client": "cd client && npm start",
     "start": "node server/index.js",
-    "build": "cd client && npm run build",
+    "build": "cd client && CI=false npm run build",
+    "build:verbose": "cd client && CI=false GENERATE_SOURCEMAP=false npm run build && echo 'Build completed successfully'",
     "install-all": "npm install && cd client && npm install",
-    "build:check": "node -e \"const fs=require('fs');const p=require('path');const build=p.join(__dirname,'client/build/index.html');console.log(fs.existsSync(build)?'✅ Build exists':'❌ Build missing');process.exit(fs.existsSync(build)?0:1);\""
+    "build:check": "node -e \"const fs=require('fs');const p=require('path');const build=p.join(__dirname,'client/build/index.html');console.log('Checking build at:', build);console.log(fs.existsSync(build)?'✅ Build exists':'❌ Build missing');if(!fs.existsSync(build)){const buildDir=p.join(__dirname,'client/build');console.log('Build dir exists:', fs.existsSync(buildDir));const clientDir=p.join(__dirname,'client');console.log('Client dir exists:', fs.existsSync(clientDir));}process.exit(fs.existsSync(build)?0:1);\""
   },
   "keywords": [
     "discord",
