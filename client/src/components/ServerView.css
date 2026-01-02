@@ -1,0 +1,46 @@
+.server-view {
+  display: flex;
+  flex: 1;
+  height: 100vh;
+}
+
+.channels-sidebar {
+  width: 240px;
+  background: #2f3136;
+  display: flex;
+  flex-direction: column;
+}
+
+.server-header {
+  padding: 16px;
+  background: #2f3136;
+  border-bottom: 1px solid #202225;
+}
+
+.server-header h2 {
+  color: #fff;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.main-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background: #36393f;
+}
+
+.no-channel-selected {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: #72767d;
+}
+
+.no-channel-selected h2 {
+  color: #dcddde;
+  margin-bottom: 8px;
+}
+

@@ -1,0 +1,20 @@
+.main-app {
+  display: flex;
+  height: 100vh;
+  background: #36393f;
+}
+
+.no-server-selected {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: #72767d;
+}
+
+.no-server-selected h2 {
+  color: #dcddde;
+  margin-bottom: 8px;
+}
+

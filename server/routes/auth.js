@@ -1,61 +1,70 @@
 const express = require('express');
 const router = express.Router();
-const { getDatabase } = require('../database/db');
-const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const { User } = require('../models');
+const rateLimit = require('express-rate-limit');
 
-const JWT_SECRET = process.env.JWT_SECRET || 'analog-discord-secret-key';
+const JWT_SECRET = process.env.JWT_SECRET || 'change-this-secret-key';
 
-// Регистрация
-router.post('/register', async (req, res) => {
+// Rate limiting
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 5 // 5 requests per window
+});
+
+// Register
+router.post('/register', authLimiter, async (req, res) => {
   try {
     const { username, email, password } = req.body;
 
     if (!username || !email || !password) {
-      return res.status(400).json({ error: 'Username, email and password are required' });
+      return res.status(400).json({ error: 'All fields are required' });
     }
 
-    const db = getDatabase();
-    
-    const existingUser = await new Promise((resolve, reject) => {
-      db.get('SELECT * FROM users WHERE email = ? OR username = ?', [email, username], (err, row) => {
-        if (err) reject(err);
-        else resolve(row);
-      });
+    // Check if user exists
+    const existingUser = await User.findOne({
+      where: {
+        $or: [{ email }, { username }]
+      }
     });
 
     if (existingUser) {
       return res.status(400).json({ error: 'User already exists' });
     }
 
-    const hashedPassword = await bcrypt.hash(password, 10);
-
-    const userId = await new Promise((resolve, reject) => {
-      db.run(
-        'INSERT INTO users (username, email, password) VALUES (?, ?, ?)',
-        [username, email, hashedPassword],
-        function(err) {
-          if (err) reject(err);
-          else resolve(this.lastID);
-        }
-      );
+    // Create user
+    const user = await User.create({
+      username,
+      email,
+      password
     });
 
-    const token = jwt.sign({ userId, username, email }, JWT_SECRET, { expiresIn: '30d' });
+    // Generate token
+    const token = jwt.sign(
+      { userId: user.id, username: user.username, email: user.email },
+      JWT_SECRET,
+      { expiresIn: '30d' }
+    );
 
     res.status(201).json({
       message: 'User created successfully',
       token,
-      user: { id: userId, username, email }
+      user: {
+        id: user.id,
+        username: user.username,
+        email: user.email,
+        avatar: user.avatar,
+        status: user.status
+      }
     });
   } catch (error) {
-    console.error('Error registering user:', error);
+    console.error('Registration error:', error);
     res.status(500).json({ error: 'Failed to register user' });
   }
 });
 
-// Вход
-router.post('/login', async (req, res) => {
+// Login
+router.post('/login', authLimiter, async (req, res) => {
   try {
     const { email, password } = req.body;
 
@@ -63,25 +72,24 @@ router.post('/login', async (req, res) => {
       return res.status(400).json({ error: 'Email and password are required' });
     }
 
-    const db = getDatabase();
-
-    const user = await new Promise((resolve, reject) => {
-      db.get('SELECT * FROM users WHERE email = ?', [email], (err, row) => {
-        if (err) reject(err);
-        else resolve(row);
-      });
-    });
+    // Find user
+    const user = await User.findOne({ where: { email } });
 
     if (!user) {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
-    const isValidPassword = await bcrypt.compare(password, user.password);
+    // Check password
+    const isValidPassword = await user.comparePassword(password);
 
     if (!isValidPassword) {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
+    // Update status
+    await user.update({ status: 'online' });
+
+    // Generate token
     const token = jwt.sign(
       { userId: user.id, username: user.username, email: user.email },
       JWT_SECRET,
@@ -91,12 +99,54 @@ router.post('/login', async (req, res) => {
     res.json({
       message: 'Login successful',
       token,
-      user: { id: user.id, username: user.username, email: user.email }
+      user: {
+        id: user.id,
+        username: user.username,
+        email: user.email,
+        avatar: user.avatar,
+        status: user.status
+      }
     });
   } catch (error) {
-    console.error('Error logging in:', error);
+    console.error('Login error:', error);
     res.status(500).json({ error: 'Failed to login' });
   }
 });
 
+// Verify token middleware
+const verifyToken = (req, res, next) => {
+  const token = req.headers.authorization?.split(' ')[1];
+
+  if (!token) {
+    return res.status(401).json({ error: 'No token provided' });
+  }
+
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET);
+    req.userId = decoded.userId;
+    next();
+  } catch (error) {
+    res.status(401).json({ error: 'Invalid token' });
+  }
+};
+
+// Get current user
+router.get('/me', verifyToken, async (req, res) => {
+  try {
+    const user = await User.findByPk(req.userId, {
+      attributes: { exclude: ['password'] }
+    });
+
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    res.json(user);
+  } catch (error) {
+    console.error('Get user error:', error);
+    res.status(500).json({ error: 'Failed to get user' });
+  }
+});
+
 module.exports = router;
+module.exports.verifyToken = verifyToken;

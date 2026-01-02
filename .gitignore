@@ -1,9 +1,12 @@
 node_modules/
+client/node_modules/
 *.log
 .env
-server/database/database.sqlite
+.env.local
 .DS_Store
 dist/
 build/
 *.sqlite
 *.db
+.vscode/
+.idea/

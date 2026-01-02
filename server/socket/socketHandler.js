@@ -1,136 +1,174 @@
-const { getDatabase } = require('../database/db');
+const { Message, Channel, ServerMember, User } = require('../models');
+const jwt = require('jsonwebtoken');
 
 function setupSocketIO(io) {
-  io.on('connection', (socket) => {
-    console.log('✅ User connected:', socket.id);
-
-    // Присоединение к комнате
-    socket.on('join_room', async (data) => {
-      const { roomId, userId } = data;
+  io.use(async (socket, next) => {
+    try {
+      const token = socket.handshake.auth.token;
+      if (!token) {
+        return next(new Error('Authentication error'));
+      }
       
-      if (roomId) {
-        socket.join(`room_${roomId}`);
-        console.log(`User ${userId} joined room ${roomId}`);
-        
-        // Уведомляем других пользователей в комнате
-        socket.to(`room_${roomId}`).emit('user_joined', { userId, socketId: socket.id });
-        
-        // Отправляем подтверждение
-        socket.emit('room_joined', { roomId });
+      const JWT_SECRET = process.env.JWT_SECRET || 'change-this-secret-key';
+      const decoded = jwt.verify(token, JWT_SECRET);
+      socket.userId = decoded.userId;
+      next();
+    } catch (error) {
+      next(new Error('Invalid token'));
+    }
+  });
+
+  io.on('connection', (socket) => {
+    console.log(`✅ User connected: ${socket.id} (User ID: ${socket.userId})`);
+
+    // Join server room
+    socket.on('join_server', async (data) => {
+      const { serverId } = data;
+      if (serverId) {
+        socket.join(`server_${serverId}`);
+        console.log(`User ${socket.userId} joined server ${serverId}`);
       }
     });
 
-    // Покидание комнаты
-    socket.on('leave_room', (data) => {
-      const { roomId } = data;
-      if (roomId) {
-        socket.to(`room_${roomId}`).emit('user_left', { socketId: socket.id });
-        socket.leave(`room_${roomId}`);
-        console.log(`User left room ${roomId}`);
+    // Leave server room
+    socket.on('leave_server', (data) => {
+      const { serverId } = data;
+      if (serverId) {
+        socket.leave(`server_${serverId}`);
+        console.log(`User ${socket.userId} left server ${serverId}`);
       }
     });
 
-    // WebRTC signaling для аудио комнаты
-    socket.on('audio_offer', (data) => {
-      socket.to(data.targetSocketId).emit('audio_offer', {
+    // Join channel room
+    socket.on('join_channel', async (data) => {
+      const { channelId } = data;
+      if (channelId) {
+        socket.join(`channel_${channelId}`);
+        console.log(`User ${socket.userId} joined channel ${channelId}`);
+      }
+    });
+
+    // Leave channel room
+    socket.on('leave_channel', (data) => {
+      const { channelId } = data;
+      if (channelId) {
+        socket.leave(`channel_${channelId}`);
+        console.log(`User ${socket.userId} left channel ${channelId}`);
+      }
+    });
+
+    // Send message
+    socket.on('send_message', async (data) => {
+      try {
+        const { content, channelId } = data;
+
+        if (!content || !channelId) {
+          socket.emit('error', { message: 'Missing required fields' });
+          return;
+        }
+
+        // Verify access
+        const channel = await Channel.findByPk(channelId);
+        if (!channel) {
+          socket.emit('error', { message: 'Channel not found' });
+          return;
+        }
+
+        const isMember = await ServerMember.findOne({
+          where: {
+            serverId: channel.serverId,
+            userId: socket.userId
+          }
+        });
+
+        if (channel.type !== 'text') {
+          socket.emit('error', { message: 'Messages can only be sent to text channels' });
+          return;
+        }
+
+        // Create message
+        const message = await Message.create({
+          content,
+          channelId,
+          userId: socket.userId
+        });
+
+        const messageWithUser = await Message.findByPk(message.id, {
+          include: [
+            {
+              model: require('../models').User,
+              as: 'user',
+              attributes: ['id', 'username', 'avatar']
+            }
+          ]
+        });
+
+        // Broadcast to channel
+        io.to(`channel_${channelId}`).emit('new_message', messageWithUser);
+      } catch (error) {
+        console.error('Send message error:', error);
+        socket.emit('error', { message: 'Failed to send message' });
+      }
+    });
+
+    // WebRTC signaling for voice/video channels
+    socket.on('webrtc_offer', (data) => {
+      socket.to(data.targetSocketId).emit('webrtc_offer', {
         offer: data.offer,
-        senderSocketId: socket.id
+        senderSocketId: socket.id,
+        channelId: data.channelId
       });
     });
 
-    socket.on('audio_answer', (data) => {
-      socket.to(data.targetSocketId).emit('audio_answer', {
+    socket.on('webrtc_answer', (data) => {
+      socket.to(data.targetSocketId).emit('webrtc_answer', {
         answer: data.answer,
         senderSocketId: socket.id
       });
     });
 
-    socket.on('audio_ice_candidate', (data) => {
-      socket.to(data.targetSocketId).emit('audio_ice_candidate', {
+    socket.on('webrtc_ice_candidate', (data) => {
+      socket.to(data.targetSocketId).emit('webrtc_ice_candidate', {
         candidate: data.candidate,
         senderSocketId: socket.id
       });
     });
 
-    // Отправка сообщения
-    socket.on('send_message', async (data) => {
-      const { roomId, userId, content, username } = data;
-
-      if (!roomId || !userId || !content) {
-        socket.emit('error', { message: 'Missing required fields' });
-        return;
-      }
-
-      try {
-        const db = getDatabase();
+    // User joined voice/video channel
+    socket.on('join_voice_channel', async (data) => {
+      const { channelId } = data;
+      if (channelId) {
+        socket.join(`voice_channel_${channelId}`);
         
-        // Сохраняем сообщение в базу данных
-        const messageId = await new Promise((resolve, reject) => {
-          db.run(`
-            INSERT INTO messages (room_id, user_id, content)
-            VALUES (?, ?, ?)
-          `, [roomId, userId, content], function(err) {
-            if (err) reject(err);
-            else resolve(this.lastID);
-          });
+        // Get user info
+        const user = await User.findByPk(socket.userId, {
+          attributes: ['id', 'username', 'avatar']
         });
-
-        // Получаем полную информацию о сообщении
-        const message = await new Promise((resolve, reject) => {
-          db.get(`
-            SELECT m.*, u.username, u.email
-            FROM messages m
-            JOIN users u ON m.user_id = u.id
-            WHERE m.id = ?
-          `, [messageId], (err, row) => {
-            if (err) reject(err);
-            else resolve(row);
-          });
-        });
-
-        // Отправляем сообщение всем в комнате
-        io.to(`room_${roomId}`).emit('new_message', message);
         
-        console.log(`Message sent in room ${roomId} by user ${userId}`);
-      } catch (error) {
-        console.error('Error sending message:', error);
-        socket.emit('error', { message: 'Failed to send message' });
-      }
-    });
-
-    // Вход в аудио комнату
-    socket.on('join_audio_room', (data) => {
-      const { roomId, userId } = data;
-      if (roomId) {
-        socket.join(`audio_room_${roomId}`);
-        // Уведомляем других пользователей
-        socket.to(`audio_room_${roomId}`).emit('user_joined_audio', {
+        socket.to(`voice_channel_${channelId}`).emit('user_joined_voice', {
           socketId: socket.id,
-          userId: userId,
-          username: 'User' // Можно получить из базы данных
+          userId: socket.userId,
+          username: user?.username
         });
-        console.log(`User ${userId} joined audio room ${roomId}`);
       }
     });
 
-    // Выход из аудио комнаты
-    socket.on('leave_audio_room', (data) => {
-      const { roomId } = data;
-      if (roomId) {
-        socket.to(`audio_room_${roomId}`).emit('user_left_audio', {
+    // User left voice/video channel
+    socket.on('leave_voice_channel', (data) => {
+      const { channelId } = data;
+      if (channelId) {
+        socket.to(`voice_channel_${channelId}`).emit('user_left_voice', {
           socketId: socket.id
         });
-        socket.leave(`audio_room_${roomId}`);
-        console.log(`User left audio room ${roomId}`);
+        socket.leave(`voice_channel_${channelId}`);
       }
     });
 
-    // Отключение
+    // Disconnect
     socket.on('disconnect', () => {
-      console.log('❌ User disconnected:', socket.id);
+      console.log(`❌ User disconnected: ${socket.id}`);
     });
   });
 }
 
 module.exports = { setupSocketIO };
-

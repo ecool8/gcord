@@ -1,36 +1,105 @@
 const express = require('express');
 const router = express.Router();
-const { getDatabase } = require('../database/db');
+const { Message, Channel, User, ServerMember } = require('../models');
+const { verifyToken } = require('./auth');
 
-// Получить сообщения комнаты
-router.get('/room/:roomId', async (req, res) => {
+// Get messages for channel
+router.get('/channel/:channelId', verifyToken, async (req, res) => {
   try {
-    const { roomId } = req.params;
-    const limit = parseInt(req.query.limit) || 50;
-    const offset = parseInt(req.query.offset) || 0;
+    const { limit = 50, offset = 0 } = req.query;
 
-    const db = getDatabase();
+    const channel = await Channel.findByPk(req.params.channelId);
+    if (!channel) {
+      return res.status(404).json({ error: 'Channel not found' });
+    }
 
-    const messages = await new Promise((resolve, reject) => {
-      db.all(`
-        SELECT m.*, u.username, u.email
-        FROM messages m
-        JOIN users u ON m.user_id = u.id
-        WHERE m.room_id = ?
-        ORDER BY m.created_at DESC
-        LIMIT ? OFFSET ?
-      `, [roomId, limit, offset], (err, rows) => {
-        if (err) reject(err);
-        else resolve(rows.reverse()); // Переворачиваем для хронологического порядка
-      });
+    // Check access
+    const isMember = await ServerMember.findOne({
+      where: {
+        serverId: channel.serverId,
+        userId: req.userId
+      }
     });
 
-    res.json(messages);
+    const server = await require('../models').Server.findByPk(channel.serverId);
+    if (server.ownerId !== req.userId && !isMember) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    const messages = await Message.findAll({
+      where: { channelId: req.params.channelId },
+      include: [
+        {
+          model: User,
+          as: 'user',
+          attributes: ['id', 'username', 'avatar']
+        }
+      ],
+      order: [['createdAt', 'DESC']],
+      limit: parseInt(limit),
+      offset: parseInt(offset)
+    });
+
+    res.json(messages.reverse());
   } catch (error) {
-    console.error('Error fetching messages:', error);
-    res.status(500).json({ error: 'Failed to fetch messages' });
+    console.error('Get messages error:', error);
+    res.status(500).json({ error: 'Failed to get messages' });
+  }
+});
+
+// Create message
+router.post('/', verifyToken, async (req, res) => {
+  try {
+    const { content, channelId } = req.body;
+
+    if (!content || !channelId) {
+      return res.status(400).json({ error: 'Content and channelId are required' });
+    }
+
+    const channel = await Channel.findByPk(channelId);
+    if (!channel) {
+      return res.status(404).json({ error: 'Channel not found' });
+    }
+
+    // Check access
+    const isMember = await ServerMember.findOne({
+      where: {
+        serverId: channel.serverId,
+        userId: req.userId
+      }
+    });
+
+    const server = await require('../models').Server.findByPk(channel.serverId);
+    if (server.ownerId !== req.userId && !isMember) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    // Text channels only for messages
+    if (channel.type !== 'text') {
+      return res.status(400).json({ error: 'Messages can only be sent to text channels' });
+    }
+
+    const message = await Message.create({
+      content,
+      channelId,
+      userId: req.userId
+    });
+
+    const messageWithUser = await Message.findByPk(message.id, {
+      include: [
+        {
+          model: User,
+          as: 'user',
+          attributes: ['id', 'username', 'avatar']
+        }
+      ]
+    });
+
+    res.status(201).json(messageWithUser);
+  } catch (error) {
+    console.error('Create message error:', error);
+    res.status(500).json({ error: 'Failed to create message' });
   }
 });
 
 module.exports = router;
-

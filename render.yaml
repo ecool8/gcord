@@ -2,14 +2,21 @@ services:
   - type: web
     name: analog-discord
     env: node
-    buildCommand: npm install
+    buildCommand: npm run install-all && npm run build
     startCommand: npm start
     envVars:
       - key: NODE_ENV
         value: production
-      - key: PORT
-        value: 5000
       - key: JWT_SECRET
         generateValue: true
+      - key: CLIENT_URL
+        fromService:
+          type: web
+          name: analog-discord
+          property: url
     healthCheckPath: /api/health
 
+databases:
+  - name: analog-discord-db
+    databaseName: analog_discord
+    user: analog_discord_user
