@@ -72,14 +72,34 @@ app.get('/api/health', (req, res) => {
 // Serve React app in production
 if (process.env.NODE_ENV === 'production') {
   app.get('*', (req, res) => {
+    // Пропускаем API запросы
+    if (req.path.startsWith('/api/')) {
+      return res.status(404).json({ error: 'API endpoint not found' });
+    }
+    
     const indexPath = path.join(__dirname, '../client/build/index.html');
     const fs = require('fs');
+    
+    // Логируем путь для отладки
+    console.log('Looking for index.html at:', indexPath);
+    console.log('Current __dirname:', __dirname);
+    
     if (fs.existsSync(indexPath)) {
       res.sendFile(indexPath);
     } else {
-      res.status(404).json({ 
+      // Показываем более детальную информацию об ошибке
+      const buildDir = path.join(__dirname, '../client/build');
+      const clientDir = path.join(__dirname, '../client');
+      console.error('Build directory exists:', fs.existsSync(buildDir));
+      console.error('Client directory exists:', fs.existsSync(clientDir));
+      console.error('Full build path:', indexPath);
+      
+      res.status(500).json({ 
         error: 'React app not built', 
-        message: 'Please run "npm run build" to build the React application' 
+        message: 'Please run "npm run build" to build the React application',
+        buildPath: indexPath,
+        buildDirExists: fs.existsSync(buildDir),
+        clientDirExists: fs.existsSync(clientDir)
       });
     }
   });

@@ -2,7 +2,7 @@ services:
   - type: web
     name: analog-discord
     env: node
-    buildCommand: npm run install-all && npm run build && echo "Build completed"
+    buildCommand: npm run install-all && npm run build && npm run build:check || (echo "Build failed!" && exit 1)
     startCommand: npm start
     envVars:
       - key: NODE_ENV

@@ -9,7 +9,8 @@
     "client": "cd client && npm start",
     "start": "node server/index.js",
     "build": "cd client && npm run build",
-    "install-all": "npm install && cd client && npm install"
+    "install-all": "npm install && cd client && npm install",
+    "build:check": "node -e \"const fs=require('fs');const p=require('path');const build=p.join(__dirname,'client/build/index.html');console.log(fs.existsSync(build)?'✅ Build exists':'❌ Build missing');process.exit(fs.existsSync(build)?0:1);\""
   },
   "keywords": [
     "discord",
