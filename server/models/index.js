@@ -21,13 +21,19 @@ Message.belongsTo(Channel, { foreignKey: 'channelId', as: 'channel' });
 User.belongsToMany(Server, { 
   through: ServerMember, 
   foreignKey: 'userId',
+  otherKey: 'serverId',
   as: 'servers' 
 });
 Server.belongsToMany(User, { 
   through: ServerMember, 
   foreignKey: 'serverId',
+  otherKey: 'userId',
   as: 'members' 
 });
+
+// ServerMember associations
+ServerMember.belongsTo(User, { foreignKey: 'userId', as: 'user' });
+ServerMember.belongsTo(Server, { foreignKey: 'serverId', as: 'server' });
 
 module.exports = {
   User,
